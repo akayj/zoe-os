@@ -4,13 +4,13 @@ __pycache__/
 .venv/
 .env
 
-# Zig Build Artifacts
+# Zig
 zig-cache/
 zig-out/
-/zoe-os/kernel-zig/zoe-socket
-/zoe-os/kernel-zig/zoe-sentinel
-/zoe-os/kernel-zig/zoe-watcher
-/zoe-os/kernel-zig/check
+# 屏蔽 kernel 目录下的所有无后缀二进制
+/kernel/*
+!/kernel/*.zig
 
-# Zoe State
+# Local states
 /tmp/zoe-*
+*.seed
