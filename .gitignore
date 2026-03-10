@@ -14,3 +14,5 @@ zig-out/
 # Local states
 /tmp/zoe-*
 *.seed
+agent-workspace/
+.agent-workspace/
