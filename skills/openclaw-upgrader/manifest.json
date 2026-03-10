@@ -1,0 +1,24 @@
+{
+  "name": "openclaw-upgrader",
+  "version": "2.1.0",
+  "description": "Interactive and robust upgrade tool for OpenClaw with self-healing capabilities.",
+  "author": "余剑剑 & 小新",
+  "entrypoint": "src/main.py",
+  "runtime": "python3",
+  "dependencies": ["typer", "requests"],
+  "homepage": "https://github.com/yourusername/openclaw-upgrader",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/openclaw-upgrader.git"
+  },
+  "tools": [
+    {
+      "name": "upgrade",
+      "description": "Start the interactive upgrade process"
+    },
+    {
+      "name": "status",
+      "description": "Check current upgrade status and logs"
+    }
+  ]
+}
