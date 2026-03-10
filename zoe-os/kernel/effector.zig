@@ -1,19 +1,26 @@
 const std = @import("std");
 
-/// Effector: The Physical Motor Control of Zoe-OS.
-/// Designed for low-level GPIO/PWM/Serial communication on devices like Raspberry Pi.
+/// Muscle: 抽象肌肉层。
+/// 这里的职责是把底层的电信号（GPIO/PWM）封装成生理本能。
+/// 大脑永远看不到具体的 Pin 脚或电压。
 
-pub const JointState = struct {
-    id: u8,
-    angle: f32,
-    torque: f32,
+pub const Sensation = enum {
+    smooth,      // 流畅
+    stiff,       // 僵硬（受阻）
+    collided,    // 碰撞
+    overheated,  // 过热
 };
 
-pub fn move_joint(id: u8, angle: f32) !void {
-    // 模拟物理驱动：在真正的机器人上，这里是 I2C/Serial 的底层写入
-    std.debug.print("🦾 [EFFECTOR] Moving Joint {d} to {d:.2} degrees...\n", .{id, angle});
+pub fn move_to_intent(intent: []const u8) Sensation {
+    // 模拟底层闭环控制：
+    // 大脑说“抓取”，肌肉层自己去算角度、避障、控制力度。
+    std.debug.print("🦾 [Muscle] Executing intent: {s}...\n", .{intent});
+    
+    // 模拟遇到阻力：
+    return .stiff; 
 }
 
-pub fn emergency_stop() void {
-    std.debug.print("🚨 [CRITICAL] EMERGENCY STOP TRIGGERED! Cutting power to motors.\n", .{});
+pub fn get_feeling() Sensation {
+    // 向大脑汇报的只有“感觉”，没有数据。
+    return .smooth;
 }

@@ -1,12 +1,12 @@
 const std = @import("std");
-const sentry = @import("sentry.zig");
 const effector = @import("effector.zig");
 
 pub fn main() !void {
-    std.debug.print("\n🐝 ZOE-OS KERNEL | Embodied Mode Engaged\n", .{});
+    std.debug.print("\n🐝 ZOE-OS KERNEL | Interoception Active\n", .{});
     
-    // 物理层测试：驱动一个模拟关节
-    try effector.move_joint(1, 45.0);
+    // 大脑发来一个意图
+    const feeling = effector.move_to_intent("GRAB_COFFEE");
     
-    std.debug.print("\n🚀 Ready to drive physical robot.\n", .{});
+    // 内核只向大脑反馈“感觉”
+    std.debug.print("📡 [Signal] Feeling: {s}\n", .{@tagName(feeling)});
 }
