@@ -1,0 +1,15 @@
+{
+  "name": "zoe-agent",
+  "version": "1.0.0",
+  "description": "Minimalist AI Agent framework. One file, no framework, self-healing loop.",
+  "author": "akayj",
+  "license": "MIT",
+  "homepage": "https://github.com/akayj/openclaw-notes",
+  "keywords": ["agent", "minimalist", "pi-agent", "self-healing", "framework"],
+  "openclaw": {
+    "requires": {
+      "bins": ["uv"]
+    },
+    "emoji": "🤖"
+  }
+}
