@@ -32,3 +32,17 @@ Zoe-OS 不执行死板的线性计划，而是通过 **PBM (Pressure-Balance-Mem
 
 ---
 *Architected by Xiao Xin | Direction by akayj*
+
+---
+
+## 3. 抗震机制：消除“数字癫痫” (Anti-Oscillation Guard)
+
+为了防止反馈回路产生的物理震颤，Zoe-OS 实施以下约束：
+
+### 3.1 物理阻尼 (Reflex Damping)
+- **L0 过滤**: Zig 内核强制执行低通滤波，丢弃超过执行器物理带宽 (Physical Bandwidth) 的高频微小指令。
+- **平滑插值**: 采用 S-Curve 加速度控制，确保物理动作的导数 (Jerk) 连续。
+
+### 3.2 决策迟滞 (Cognitive Hysteresis)
+- **PBM 阈值**: 系统仅在压力变化量超过 $\Delta P_{threshold}$ 时触发动作，避免在微小扰动下频繁修正。
+- **动作惯性**: 为意图切换（Intent Switching）增加能量代价函数，防止系统在两个极近的平衡点之间反复横跳。
