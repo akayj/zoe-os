@@ -1,236 +1,130 @@
 #!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = [
+#   "requests",
+# ]
+# ///
 """
-Zoe-Agent Core — the entire framework in one file.
-
-Inspired by:
-  - SimpleCLI (one file, no framework)
-  - Pi-Agent (sense → think → act → verify)
+Zoe-Agent: Minimalist, Self-Healing AI Agent Framework.
+One file. No framework. Built-in survival tools (read, write, list, bash).
 """
-
-import json, os, sys, time
+import json, os, sys, time, subprocess, base64
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Callable, Optional
-
 import requests
 
-# ─── CONFIG ───────────────────────────────────────────────────────────────────
+# ─── 1. SURVIVAL TOOLS (Built-in) ───────────────────────────────────────────
 
-MAX_RETRIES = 3
-BACKOFF_BASE = 2
+def read_file(path: str) -> str:
+    """Read content from a file."""
+    try: return Path(path).read_text(encoding="utf-8")
+    except Exception as e: return f"Error: {e}"
 
+def write_file(path: str, content: str) -> str:
+    """Write content to a file (overwrites)."""
+    try:
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return f"Successfully wrote to {path}"
+    except Exception as e: return f"Error: {e}"
 
-# ─── TOOL ─────────────────────────────────────────────────────────────────────
+def list_dir(path: str = ".") -> str:
+    """List files in a directory."""
+    try:
+        items = os.listdir(path)
+        return "\n".join(items) if items else "(empty)"
+    except Exception as e: return f"Error: {e}"
+
+def bash(command: str) -> str:
+    """Execute a shell command (be careful!)."""
+    try:
+        r = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
+        return f"STDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}"
+    except Exception as e: return f"Error: {e}"
+
+# ─── 2. CORE CLASSES ────────────────────────────────────────────────────────
 
 @dataclass
 class Tool:
-    """A tool the agent can call. Name, description, function."""
     name: str
     description: str
     fn: Callable
-    parameters: dict = field(default_factory=lambda: {
-        "type": "object", "properties": {}, "required": []
-    })
+    parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}})
 
     def to_spec(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.parameters,
-            },
-        }
-
-
-# ─── STATE ────────────────────────────────────────────────────────────────────
+        return {"type": "function", "function": {"name": self.name, "description": self.description, "parameters": self.parameters}}
 
 @dataclass
 class ZoeState:
-    """Crash-safe checkpoint. Survives restarts."""
-    phase: str = "idle"
-    task: str = ""
-    retries: int = 0
-    last_error: str = ""
-    result: str = ""
-    created_at: float = field(default_factory=time.time)
-    updated_at: float = 0.0
-
+    phase: str = "idle"; task: str = ""; retries: int = 0; last_error: str = ""; result: str = ""
     def save(self, path: Path):
-        self.updated_at = time.time()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(asdict(self), ensure_ascii=False, indent=2))
-
+        path.write_text(json.dumps(asdict(self), ensure_ascii=False))
     @classmethod
-    def load(cls, path: Path) -> "ZoeState":
-        if path.exists():
-            data = json.loads(path.read_text())
-            return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+    def load(cls, path: Path):
+        if path.exists(): return cls(**json.load(path.open()))
         return cls()
 
-
-# ─── ZOE ──────────────────────────────────────────────────────────────────────
-
 class Zoe:
-    """
-    The entire agent.
-
-    Sense  → gather context
-    Think  → ask LLM what to do
-    Act    → execute tool
-    Verify → check result, retry if failed
-    """
-
-    def __init__(
-        self,
-        name: str = "zoe",
-        instruction: str = "You are a helpful assistant.",
-        tools: list[Tool] | None = None,
-        model: str | None = None,
-        base_url: str | None = None,
-        api_key: str | None = None,
-        state_dir: str | None = None,
-        max_retries: int = MAX_RETRIES,
-        max_turns: int = 10,
-        verbose: bool = False,
-    ):
-        self.name = name
-        self.instruction = instruction
-        self.tools = {t.name: t for t in (tools or [])}
-        self.model = model or os.environ.get("ZOE_MODEL", "kimi-k2.5")
-        self.base_url = (base_url or os.environ.get("ZOE_BASE_URL", "https://api.moonshot.cn/v1")).rstrip("/")
+    def __init__(self, name="zoe", instruction="Helpful assistant.", tools=None, api_key=None, base_url=None, model=None, verbose=True):
+        self.name = name; self.instruction = instruction; self.verbose = verbose
         self.api_key = api_key or os.environ.get("ZOE_API_KEY", "")
-        self.max_retries = max_retries
-        self.max_turns = max_turns
-        self.verbose = verbose
-
-        state_root = state_dir or os.environ.get("ZOE_STATE_DIR", f"/tmp/zoe-{name}")
-        self.state_path = Path(state_root) / "state.json"
+        self.base_url = (base_url or os.environ.get("ZOE_BASE_URL", "https://api.moonshot.cn/v1")).rstrip("/")
+        self.model = model or os.environ.get("ZOE_MODEL", "kimi-k2.5")
+        self.state_path = Path(f"/tmp/zoe-{name}/state.json")
         self.state = ZoeState.load(self.state_path)
-
-    def _log(self, msg: str):
-        if self.verbose:
-            print(msg, file=sys.stderr)
-
-    # ── LLM ──
-
-    def _chat(self, messages: list) -> dict:
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
+        
+        # Built-in survival tools
+        self.tools = {
+            "read_file": Tool("read_file", "Read a file's content", read_file, {"type": "object", "properties": {"path": {"type": "string"}}}),
+            "write_file": Tool("write_file", "Write content to a file", write_file, {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}}),
+            "list_dir": Tool("list_dir", "List files in a directory", list_dir, {"type": "object", "properties": {"path": {"type": "string", "default": "."}}}),
+            "bash": Tool("bash", "Execute shell command", bash, {"type": "object", "properties": {"command": {"type": "string"}}})
         }
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "max_tokens": 4096,
-        }
-        if self.tools:
-            payload["tools"] = [t.to_spec() for t in self.tools.values()]
+        if tools: self.tools.update({t.name: t for t in tools})
 
-        for attempt in range(self.max_retries):
+    def _log(self, m): 
+        if self.verbose: print(f"🤖 [Zoe] {m}", file=sys.stderr)
+
+    def _chat(self, messages):
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        payload = {"model": self.model, "messages": messages, "tools": [t.to_spec() for t in self.tools.values()]}
+        for i in range(3):
             try:
-                r = requests.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=headers, json=payload, timeout=60,
-                )
-                if r.status_code == 429:
-                    wait = BACKOFF_BASE ** (attempt + 1)
-                    self._log(f"⏳ Rate limited, waiting {wait}s")
-                    time.sleep(wait)
-                    continue
-                r.raise_for_status()
-                return r.json()
+                r = requests.post(f"{self.base_url}/chat/completions", headers=headers, json=payload, timeout=60)
+                r.raise_for_status(); return r.json()
             except Exception as e:
-                if attempt < self.max_retries - 1:
-                    wait = BACKOFF_BASE ** (attempt + 1)
-                    self._log(f"⚠️ {e}, retry in {wait}s")
-                    time.sleep(wait)
-                else:
-                    raise
-        return {}
+                time.sleep(2**(i+1)); self._log(f"Retry {i+1} due to {e}")
+        raise Exception("LLM call failed after retries")
 
-    # ── CORE LOOP ──
-
-    def run(self, task: str) -> str:
-        """Sense → Think → Act → Verify loop."""
-        self.state = ZoeState(task=task, phase="sensing")
-        self.state.save(self.state_path)
-
-        messages = [
-            {"role": "system", "content": self._system_prompt()},
-            {"role": "user", "content": task},
-        ]
-
-        for turn in range(self.max_turns):
-            self._log(f"🔄 [{turn+1}/{self.max_turns}]")
-
-            self.state.phase = "thinking"
-            self.state.save(self.state_path)
-
-            try:
-                response = self._chat(messages)
-            except Exception as e:
-                self.state.last_error = str(e)
-                self.state.phase = "error"
-                self.state.save(self.state_path)
-                return f"Error: {e}"
-
-            choice = response.get("choices", [{}])[0]
-            msg = choice.get("message", {})
-            finish = choice.get("finish_reason", "")
-
-            messages.append(msg)
-
-            # No tool call → done
-            if finish != "tool_calls" or not msg.get("tool_calls"):
-                self.state.phase = "done"
-                self.state.result = msg.get("content", "")
-                self.state.save(self.state_path)
+    def run(self, task: str):
+        self.state = ZoeState(task=task, phase="running"); self.state.save(self.state_path)
+        messages = [{"role": "system", "content": f"{self.instruction}\nBuilt-in tools: read_file, write_file, list_dir, bash. Sense → Think → Act → Verify."}, {"role": "user", "content": task}]
+        
+        for turn in range(10):
+            self._log(f"Turn {turn+1} Thinking..."); res = self._chat(messages)
+            msg = res["choices"][0]["message"]; messages.append(msg)
+            
+            if not msg.get("tool_calls"):
+                self.state.result = msg.get("content", ""); self.state.phase = "done"; self.state.save(self.state_path)
                 return self.state.result
-
-            # Execute tools
-            self.state.phase = "acting"
-            self.state.save(self.state_path)
-
+            
+            self.state.phase = "acting"; self.state.save(self.state_path)
             for tc in msg["tool_calls"]:
-                fn_name = tc["function"]["name"]
-                fn_args = tc["function"].get("arguments", "{}")
-                self._log(f"⚡ {fn_name}({fn_args})")
+                fn, args = tc["function"]["name"], json.loads(tc["function"].get("arguments", "{}"))
+                self._log(f"Executing {fn}({args})"); out = self.tools[fn].fn(**args)
+                messages.append({"role": "tool", "tool_call_id": tc["id"], "content": out})
+        return "Timeout"
 
-                tool = self.tools.get(fn_name)
-                if not tool:
-                    result = f"Unknown tool: {fn_name}"
-                else:
-                    try:
-                        args = json.loads(fn_args) if fn_args else {}
-                        result = str(tool.fn(**args))
-                    except Exception as e:
-                        result = f"Error: {e}"
-                        self.state.retries += 1
+# ─── 3. CLI ──────────────────────────────────────────────────────────────────
 
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "content": result,
-                })
+def main():
+    if len(sys.argv) < 2: 
+        print("zoe run 'task' | status | version"); return
+    cmd = sys.argv[1]
+    if cmd == "run": print(Zoe().run(" ".join(sys.argv[2:])))
+    elif cmd == "version": print("zoe-agent 0.1.3 (built-in survival tools)")
 
-            if self.state.retries >= self.max_retries:
-                self.state.phase = "failed"
-                self.state.save(self.state_path)
-                return f"Failed after {self.max_retries} retries"
-
-        self.state.phase = "timeout"
-        self.state.save(self.state_path)
-        return "Max turns reached"
-
-    def _system_prompt(self) -> str:
-        parts = [self.instruction, "", "You are a Zoe-Agent. Be direct. No fluff."]
-        if self.tools:
-            parts.append("")
-            parts.append("Available tools:")
-            for t in self.tools.values():
-                parts.append(f"  - {t.name}: {t.description}")
-        return "\n".join(parts)
-
-    def status(self) -> dict:
-        return asdict(self.state)
+if __name__ == "__main__": main()
