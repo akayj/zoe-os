@@ -34,15 +34,28 @@ Zoe 是 Agent 的**最小可行实现**：
     └── 失败 → 指数退避 → 重试
 ```
 
-## 安装
+## 安装与运行 (UV 驱动)
 
+Zoe 深度适配 [uv](https://github.com/astral-sh/uv)，支持极速安装与零配置运行。
+
+### 1. 零安装运行 (推荐)
+无需预先安装，直接执行：
 ```bash
-# UV（推荐）
-uv venv .venv && source .venv/bin/activate
-uv pip install -e .
+uv run zoe run "检查系统状态"
+```
 
-# pipx（全局）
-pipx install .
+### 2. 全局工具安装
+如果你想在任何路径直接使用 `zoe` 命令：
+```bash
+uv tool install .
+# 现在可以直接执行:
+zoe run "任务"
+```
+
+### 3. 开发模式
+```bash
+uv venv && source .venv/bin/activate
+uv pip install -e .
 ```
 
 ## 使用
