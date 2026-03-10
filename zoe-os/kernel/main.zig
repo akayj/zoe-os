@@ -1,15 +1,12 @@
 const std = @import("std");
 const sentry = @import("sentry.zig");
-
-/// main.zig: The Kernel Entrypoint.
-/// Coordinates the Body (Pulse) and Sensing (Sentry).
+const effector = @import("effector.zig");
 
 pub fn main() !void {
-    std.debug.print("\n🐝 ZOE-OS KERNEL | Metabolism Service\n", .{});
+    std.debug.print("\n🐝 ZOE-OS KERNEL | Embodied Mode Engaged\n", .{});
     
-    // 物理自检
-    const initial_vitals = sentry.scan();
-    std.debug.print("Initial Sensing: {d} entities found (Entropy: {d:.2})\n", .{initial_vitals.files, initial_vitals.entropy});
-
-    std.debug.print("\n🚀 Ready for Brain Connection.\n", .{});
+    // 物理层测试：驱动一个模拟关节
+    try effector.move_joint(1, 45.0);
+    
+    std.debug.print("\n🚀 Ready to drive physical robot.\n", .{});
 }
