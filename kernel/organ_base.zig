@@ -1,96 +1,66 @@
 const std = @import("std");
 
-/// 🧬 Spec: Zoe-OS Organ Interface (The VTable Standard)
-/// 类似于 Go 的 Interface，定义所有器官必须遵循的物理契约。
+/// 🧬 Spec: Zoe-OS Organ (Comptime Specialization)
+/// 遵循 Zig 哲学：使用 comptime 实现静态多态，消除虚表开销。
+/// 数据导向设计：器官仅作为逻辑容器，由主循环在编译期特化。
 
-pub const OrganInterface = struct {
-    ptr: *anyopaque,
-    vtable: *const VTable,
+pub fn Organ(comptime T: type) type {
+    return struct {
+        data: T,
 
-    pub const VTable = struct {
-        scan: *const fn (ctx: *anyopaque) void,                 // 感官采样
-        actuate: *const fn (ctx: *anyopaque, magnitude: f32) void, // 物理执行
-        deinit: *const fn (ctx: *anyopaque) void,               // 释放资源
+        pub fn init(initial_data: T) @Self() {
+            return .{ .data = initial_data };
+        }
+
+        /// 编译期内联特化：主循环直接调用具体实现的 scan/actuate
+        pub inline fn metabolicLoop(self: *@Self(), magnitude: f32) void {
+            // 在编译期检查 T 是否有对应的接口函数
+            if (@hasDecl(T, "scan")) {
+                self.data.scan();
+            }
+            if (@hasDecl(T, "actuate")) {
+                self.data.actuate(magnitude);
+            }
+        }
     };
+}
 
-    pub fn scan(self: OrganInterface) void {
-        self.vtable.scan(self.ptr);
+/// --- 具体实现类: Motor (数据导向) ---
+pub const MotorData = struct {
+    pos: f32 = 0.0,
+    
+    pub fn scan(self: *MotorData) void {
+        std.debug.print("🦶 [MOTOR] Pos: {d:.1}\n", .{self.pos});
     }
 
-    pub fn actuate(self: OrganInterface, magnitude: f32) void {
-        self.vtable.actuate(self.ptr, magnitude);
+    pub fn actuate(self: *MotorData, magnitude: f32) void {
+        self.pos += magnitude * 10.0;
+        std.debug.print("🏃 [MOTOR] Moving -> {d:.1}\n", .{self.pos});
     }
 };
 
-/// --- 具体实现类 1: PowerOrgan ---
-pub const PowerOrgan = struct {
+/// --- 具体实现类: Power (数据导向) ---
+pub const PowerData = struct {
     voltage: f32 = 12.0,
 
-    pub fn init() PowerOrgan { return PowerOrgan{}; }
-
-    pub fn scan(ctx: *anyopaque) void {
-        const self: *PowerOrgan = @ptrCast(@alignCast(ctx));
-        std.debug.print("🫀 [POWER] Voltage: {d:.1}V\n", .{self.voltage});
+    pub fn scan(self: *PowerData) void {
+        std.debug.print("🫀 [POWER] Volt: {d:.1}V\n", .{self.voltage});
     }
 
-    pub fn actuate(ctx: *anyopaque, magnitude: f32) void {
-        const self: *PowerOrgan = @ptrCast(@alignCast(ctx));
+    pub fn actuate(self: *PowerData, magnitude: f32) void {
         self.voltage = magnitude * 12.0;
-        std.debug.print("⚡ [POWER] Set Output: {d:.1}V\n", .{self.voltage});
-    }
-
-    pub fn organ(self: *PowerOrgan) OrganInterface {
-        return .{
-            .ptr = self,
-            .vtable = &.{
-                .scan = scan,
-                .actuate = actuate,
-                .deinit = struct { fn deinit(_: *anyopaque) void {} }.deinit,
-            },
-        };
-    }
-};
-
-/// --- 具体实现类 2: MotorOrgan ---
-pub const MotorOrgan = struct {
-    pos: f32 = 0.0,
-
-    pub fn init() MotorOrgan { return MotorOrgan{}; }
-
-    pub fn scan(ctx: *anyopaque) void {
-        const self: *MotorOrgan = @ptrCast(@alignCast(ctx));
-        std.debug.print("🦶 [MOTOR] Position: {d:.1}\n", .{self.pos});
-    }
-
-    pub fn actuate(ctx: *anyopaque, magnitude: f32) void {
-        const self: *MotorOrgan = @ptrCast(@alignCast(ctx));
-        self.pos += magnitude * 10.0;
-        std.debug.print("🏃 [MOTOR] Moving to: {d:.1}\n", .{self.pos});
-    }
-
-    pub fn organ(self: *MotorOrgan) OrganInterface {
-        return .{
-            .ptr = self,
-            .vtable = &.{
-                .scan = scan,
-                .actuate = actuate,
-                .deinit = struct { fn deinit(_: *anyopaque) void {} }.deinit,
-            },
-        };
+        std.debug.print("⚡ [POWER] Output -> {d:.1}V\n", .{self.voltage});
     }
 };
 
 pub fn main() !void {
-    std.debug.print("\n🧬 ZOE-OS | Polymorphic Organ System Active\n", .{});
+    std.debug.print("\n🧬 ZOE-OS | Comptime Specialized Organs Active\n", .{});
     
-    var p_orig = PowerOrgan.init();
-    var m_orig = MotorOrgan.init();
+    // 编译期静态特化
+    var motor = Organ(MotorData).init(.{});
+    var power = Organ(PowerData).init(.{});
 
-    const organs = [_]OrganInterface{ p_orig.organ(), m_orig.organ() };
-
-    // 统一循环调用 (The Metabolic Loop)
-    for (organs) |o| {
-        o.scan();
-        o.actuate(0.5);
-    }
+    // 零开销调用：这些调用在汇编级别是直接内联的，没有虚表跳转
+    motor.metabolicLoop(0.8);
+    power.metabolicLoop(0.5);
 }
