@@ -1,0 +1,9 @@
+{
+  "_note": "Default config. Override via environment variables.",
+  "app_id": "cli_a92c19f76bf95cc4",
+  "app_secret": "JMWSokscDBlFZ9S6mnSjFf7rgtASbNsP",
+  "calendar_id": "feishu.cn_iH2CxLe6B3XVWFkHKv4HGc@group.calendar.feishu.cn",
+  "timezone": "Asia/Shanghai",
+  "default_duration_min": 30,
+  "default_attendee_ability": "can_see_others"
+}
