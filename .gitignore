@@ -5,6 +5,7 @@ __pycache__/
 .env
 
 # Zig
+.zig-cache/
 zig-cache/
 zig-out/
 # 屏蔽 kernel 目录下的所有无后缀二进制

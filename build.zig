@@ -10,9 +10,11 @@ pub fn build(b: *std.Build) void {
     // 2. 创建主可执行文件 zoe-kernel
     const exe = b.addExecutable(.{
         .name = "zoe-kernel",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
 
     // 3. 安装可执行文件 (zig build)
@@ -27,11 +29,13 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the Zoe-OS Kernel");
     run_step.dependOn(&run_cmd.step);
 
-    // 5. 定义测试子命令 (zig build test)
+    // 5. 定义测试子命令
     const exe_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
     const test_step = b.step("test", "Run unit tests");
