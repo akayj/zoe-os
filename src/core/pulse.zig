@@ -131,7 +131,7 @@ const OrganRegistry = struct {
             if (slot.*) |*organ| {
                 if (now - organ.last_heartbeat > HEARTBEAT_TIMEOUT / time.ns_per_s) {
                     organ.is_active = false;
-                    std.debug.print("[Kernel] Organ {s} timeout, marked inactive\\n", .{organ.id});
+                    std.debug.print("[Kernel] Organ {s} timeout, marked inactive\n", .{organ.id});
                 }
             }
         }
@@ -155,9 +155,9 @@ pub fn main() !void {
     var listener = try server.listen(.{ .kernel_backlog = 128 });
     defer listener.deinit();
 
-    std.debug.print("\\n🐝 ZOE-OS KERNEL v0.3.0 | Signal Bus Active\\n", .{});
-    std.debug.print("Pulse Bus: {s}\\n", .{SOCKET_PATH});
-    std.debug.print("Waiting for organs to register...\\n\\n", .{});
+    std.debug.print("\n🐝 ZOE-OS KERNEL v0.3.0 | Signal Bus Active\n", .{});
+    std.debug.print("Pulse Bus: {s}\n", .{SOCKET_PATH});
+    std.debug.print("Waiting for organs to register...\n\n", .{});
 
     // 3. 主循环
     while (true) {
@@ -167,18 +167,18 @@ pub fn main() !void {
         // 读取信号
         var buffer: [BUFFER_SIZE]u8 = undefined;
         const bytes_read = conn.stream.read(&buffer) catch |err| {
-            std.debug.print("[Kernel] Read error: {}\\n", .{err});
+            std.debug.print("[Kernel] Read error: {}\n", .{err});
             continue;
         };
 
         if (bytes_read == 0) continue;
 
         const message = buffer[0..bytes_read];
-        std.debug.print("[Kernel] Received: {s}\\n", .{message});
+        std.debug.print("[Kernel] Received: {s}\n", .{message});
 
         // 解析并处理信号
         processSignal(allocator, &registry, message, conn.stream) catch |err| {
-            std.debug.print("[Kernel] Process error: {}\\n", .{err});
+            std.debug.print("[Kernel] Process error: {}\n", .{err});
         };
 
         // 检查心跳超时
@@ -193,8 +193,18 @@ fn processSignal(allocator: std.mem.Allocator, registry: *OrganRegistry, message
 
     const root = parsed.value;
 
+    // 确保根节点是 JSON 对象
+    if (root != .object) {
+        try sendError(stream, "Expected JSON object");
+        return;
+    }
+
     // 获取信号类型
-    const type_str = switch (root.object.get("type")) {
+    const type_val = root.object.get("type") orelse {
+        try sendError(stream, "Missing required field: type");
+        return;
+    };
+    const type_str = switch (type_val) {
         .string => |s| s,
         else => {
             try sendError(stream, "Invalid signal type");
@@ -217,18 +227,26 @@ fn processSignal(allocator: std.mem.Allocator, registry: *OrganRegistry, message
 }
 
 fn handleRegister(allocator: std.mem.Allocator, registry: *OrganRegistry, root: json.Value, stream: net.Stream) !void {
-    const organ_id = switch (root.object.get("organ_id")) {
+    const organ_id_val = root.object.get("organ_id") orelse {
+        try sendError(stream, "Missing required field: organ_id");
+        return;
+    };
+    const organ_id = switch (organ_id_val) {
         .string => |s| s,
         else => {
-            try sendError(stream, "Missing organ_id");
+            try sendError(stream, "Invalid organ_id");
             return;
         },
     };
 
-    const capability = switch (root.object.get("capability")) {
+    const capability_val = root.object.get("capability") orelse {
+        try sendError(stream, "Missing required field: capability");
+        return;
+    };
+    const capability = switch (capability_val) {
         .string => |s| s,
         else => {
-            try sendError(stream, "Missing capability");
+            try sendError(stream, "Invalid capability");
             return;
         },
     };
@@ -238,7 +256,7 @@ fn handleRegister(allocator: std.mem.Allocator, registry: *OrganRegistry, root: 
     const cap_copy = try allocator.dupe(u8, capability);
 
     if (registry.register(id_copy, cap_copy, stream)) {
-        std.debug.print("[Kernel] Organ registered: {s} ({s})\\n", .{ id_copy, cap_copy });
+        std.debug.print("[Kernel] Organ registered: {s} ({s})\n", .{ id_copy, cap_copy });
         try sendAck(stream, "REGISTERED", id_copy);
     } else {
         try sendError(stream, "Registry full");
@@ -246,10 +264,14 @@ fn handleRegister(allocator: std.mem.Allocator, registry: *OrganRegistry, root: 
 }
 
 fn handleIntent(allocator: std.mem.Allocator, registry: *OrganRegistry, root: json.Value, stream: net.Stream) !void {
-    const target = switch (root.object.get("target")) {
+    const target_val = root.object.get("target") orelse {
+        try sendError(stream, "Missing required field: target");
+        return;
+    };
+    const target = switch (target_val) {
         .string => |s| s,
         else => {
-            try sendError(stream, "Missing target");
+            try sendError(stream, "Invalid target");
             return;
         },
     };
@@ -266,7 +288,7 @@ fn handleIntent(allocator: std.mem.Allocator, registry: *OrganRegistry, root: js
         defer allocator.free(intent_json);
 
         _ = try organ.stream.write(intent_json);
-        std.debug.print("[Kernel] Intent forwarded to: {s}\\n", .{target});
+        std.debug.print("[Kernel] Intent forwarded to: {s}\n", .{target});
 
         try sendAck(stream, "FORWARDED", target);
     } else {
@@ -276,44 +298,49 @@ fn handleIntent(allocator: std.mem.Allocator, registry: *OrganRegistry, root: js
 
 fn handleFeeling(allocator: std.mem.Allocator, registry: *OrganRegistry, root: json.Value, stream: net.Stream) !void {
     _ = registry;
-    _ = stream;
 
-    std.debug.print("[Kernel] Feeling received from organ\\n", .{});
+    std.debug.print("[Kernel] Feeling received from organ\n", .{});
 
     // 这里应该转发给大脑 (Core)
     const feeling_json = try json.stringifyAlloc(allocator, root, .{});
     defer allocator.free(feeling_json);
 
-    std.debug.print("[Kernel] Feeling: {s}\\n", .{feeling_json});
+    std.debug.print("[Kernel] Feeling: {s}\n", .{feeling_json});
+
+    // 回复确认，避免连接挂起
+    try sendAck(stream, "FEELING_RECEIVED", "kernel");
 }
 
 fn handleBeat(allocator: std.mem.Allocator, registry: *OrganRegistry, root: json.Value, stream: net.Stream) !void {
-    const organ_id = switch (root.object.get("organ_id")) {
+    _ = allocator;
+
+    const organ_id_val = root.object.get("organ_id") orelse {
+        try sendError(stream, "Missing required field: organ_id");
+        return;
+    };
+    const organ_id = switch (organ_id_val) {
         .string => |s| s,
         else => {
-            try sendError(stream, "Missing organ_id");
+            try sendError(stream, "Invalid organ_id");
             return;
         },
     };
 
     registry.updateHeartbeat(organ_id);
-    std.debug.print("[Kernel] Heartbeat from: {s}\\n", .{organ_id});
+    std.debug.print("[Kernel] Heartbeat from: {s}\n", .{organ_id});
 
     // 发送心跳响应
-    const beat_response = try std.fmt.allocPrint(allocator, "{{\\\"type\\\":\\\"ACK\\\",\\\"status\\\":\\\"BEAT_OK\\\",\\\"organ_id\\\":\\\"{s}\\\"}}\\n", .{organ_id});
-    defer allocator.free(beat_response);
-
-    _ = try stream.write(beat_response);
+    try sendAck(stream, "BEAT_OK", organ_id);
 }
 
 fn sendAck(stream: net.Stream, status: []const u8, organ_id: []const u8) !void {
     var buffer: [256]u8 = undefined;
-    const msg = try std.fmt.bufPrint(&buffer, "{{\\\"type\\\":\\\"ACK\\\",\\\"status\\\":\\\"{s}\\\",\\\"organ_id\\\":\\\"{s}\\\"}}\\n", .{ status, organ_id });
+    const msg = try std.fmt.bufPrint(&buffer, "{{\"type\":\"ACK\",\"status\":\"{s}\",\"organ_id\":\"{s}\"}}\n", .{ status, organ_id });
     _ = try stream.write(msg);
 }
 
 fn sendError(stream: net.Stream, message: []const u8) !void {
     var buffer: [256]u8 = undefined;
-    const msg = try std.fmt.bufPrint(&buffer, "{{\\\"type\\\":\\\"ERROR\\\",\\\"message\\\":\\\"{s}\\\"}}\\n", .{message});
+    const msg = try std.fmt.bufPrint(&buffer, "{{\"type\":\"ERROR\",\"message\":\"{s}\"}}\n", .{message});
     _ = try stream.write(msg);
 }

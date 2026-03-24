@@ -8,12 +8,12 @@ pub fn Organ(comptime T: type) type {
     return struct {
         data: T,
 
-        pub fn init(initial_data: T) @Self() {
+        pub fn init(initial_data: T) @This() {
             return .{ .data = initial_data };
         }
 
         /// 编译期内联特化：主循环直接调用具体实现的 scan/actuate
-        pub inline fn metabolicLoop(self: *@Self(), magnitude: f32) void {
+        pub inline fn metabolicLoop(self: *@This(), magnitude: f32) void {
             // 在编译期检查 T 是否有对应的接口函数
             if (@hasDecl(T, "scan")) {
                 self.data.scan();
